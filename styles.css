@@ -12,6 +12,7 @@
     --error-color: #f44336;
     --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     --border-radius: 8px;
+    --primary-dark: #3a5a80; /* Added for button hover states */
 }
 
 * {
@@ -713,4 +714,98 @@ footer {
 #reportFormat:focus {
     outline: none;
     border-color: var(--primary-color);
+}
+
+/* Enhanced Loading Overlay */
+.loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+    transition: opacity 0.3s ease;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loading.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid rgba(74, 111, 165, 0.2);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+}
+
+.loading-text {
+    color: var(--text-color);
+    font-size: 1.1rem;
+    font-weight: 500;
+    max-width: 80%;
+    text-align: center;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Disabled State for Buttons */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: #cccccc !important;
+    color: #666666 !important;
+}
+
+/* Enhanced Error States */
+.status-error {
+    color: var(--error-color) !important;
+    font-weight: 500;
+}
+
+/* File Upload Validation */
+.file-error {
+    color: var(--error-color);
+    font-size: 0.9rem;
+    margin-top: 5px;
+    display: none;
+}
+
+.file-error.visible {
+    display: block;
+}
+
+/* Rate Limit Notification */
+.rate-limit-notice {
+    background-color: #fff3e0;
+    border-left: 4px solid var(--warning-color);
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    font-size: 0.9rem;
+}
+
+/* Responsive Tweaks for New Elements */
+@media (max-width: 768px) {
+    .loading-text {
+        font-size: 1rem;
+    }
+    
+    .rate-limit-notice {
+        margin-left: 10px;
+        margin-right: 10px;
+    }
 }

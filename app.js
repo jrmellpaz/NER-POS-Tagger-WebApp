@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Security and performance state
+    let isProcessing = false;
+    let lastProcessTime = 0;
+    const PROCESS_COOLDOWN = 5000; // 5 seconds cooldown
+    
     // Check if required libraries are loaded
     if (typeof window.nlp === 'undefined') {
         console.error('Compromise.js library not loaded!');
@@ -24,7 +29,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabButtons = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     const entityTypeFilter = document.getElementById('entityTypeFilter');
-    
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
+
     // Tab switching functionality
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
@@ -42,20 +49,33 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load sample text
     sampleBtn.addEventListener('click', function() {
+        if (isProcessing) {
+            showError('Please wait for current operation to complete');
+            return;
+        }
+        
+        showLoading('Loading sample text...');
+        
         fetch('https://baconipsum.com/api/?type=meat-and-filler&paras=2&format=text')
             .then(response => response.text())
             .then(text => {
-                inputText.value = text;
+                inputText.value = DOMPurify.sanitize(text);
+                hideLoading();
             })
             .catch(error => {
                 console.error('Error loading sample text:', error);
                 // Fallback sample text
-                inputText.value = `Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`;
+                inputText.value = DOMPurify.sanitize(`Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`);
+                hideLoading();
             });
     });
     
     // Clear text
     clearBtn.addEventListener('click', function() {
+        if (isProcessing) {
+            showError('Please wait for current operation to complete');
+            return;
+        }
         inputText.value = '';
     });
     
@@ -160,7 +180,146 @@ document.addEventListener('DOMContentLoaded', function() {
     // Helper function to update progress
     function updateProgress(percent, message) {
         progressBar.style.width = `${percent}%`;
-        progressText.textContent = message;
+        progressText.textContent = DOMPurify.sanitize(message);
+    }
+    
+    // Show loading overlay
+    function showLoading(message) {
+        loadingText.textContent = DOMPurify.sanitize(message);
+        loadingOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    // Hide loading overlay
+    function hideLoading() {
+        loadingOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    
+    // Show error message
+    function showError(message) {
+        alert(DOMPurify.sanitize(message));
+    }
+    
+    // File upload handling with validation
+    uploadBtn.addEventListener('click', () => {
+        if (isProcessing) {
+            showError('Please wait for current operation to complete');
+            return;
+        }
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // File validation
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+        const validTypes = ['text/plain', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        
+        if (file.size > MAX_FILE_SIZE) {
+            showError('File size exceeds 5MB limit');
+            fileInput.value = '';
+            return;
+        }
+        
+        if (!validTypes.includes(file.type)) {
+            showError('Invalid file type. Please upload a .txt, .docx, or .pdf file');
+            fileInput.value = '';
+            return;
+        }
+
+        fileName.textContent = DOMPurify.sanitize(file.name);
+        processingSection.classList.remove('hidden');
+        statusText.textContent = 'Reading file...';
+        statusText.classList.add('processing');
+        showLoading('Reading uploaded file...');
+
+        try {
+            let text = '';
+            const fileType = file.name.split('.').pop().toLowerCase();
+
+            switch (fileType) {
+                case 'txt':
+                    text = await readTextFile(file);
+                    break;
+                case 'docx':
+                    text = await readDocxFile(file);
+                    break;
+                case 'pdf':
+                    text = await readPdfFile(file);
+                    break;
+                default:
+                    throw new Error('Unsupported file type');
+            }
+
+            inputText.value = DOMPurify.sanitize(text);
+            statusText.textContent = 'File loaded successfully';
+            statusText.classList.remove('processing');
+            hideLoading();
+        } catch (error) {
+            console.error('Error reading file:', error);
+            statusText.textContent = 'Error reading file';
+            statusText.classList.remove('processing');
+            statusText.style.color = 'var(--error-color)';
+            hideLoading();
+            showError('Error reading file: ' + error.message);
+            fileInput.value = '';
+        }
+    });
+
+    // File reading functions
+    async function readTextFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(DOMPurify.sanitize(e.target.result));
+            reader.onerror = (e) => reject(new Error('Error reading text file'));
+            reader.readAsText(file);
+        });
+    }
+
+    async function readDocxFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const arrayBuffer = e.target.result;
+                    const result = await mammoth.extractRawText({ arrayBuffer });
+                    resolve(DOMPurify.sanitize(result.value));
+                } catch (error) {
+                    reject(new Error('Error reading DOCX file: ' + error.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Error reading DOCX file'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    async function readPdfFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const typedarray = new Uint8Array(e.target.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    let fullText = '';
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items.map(item => item.str).join(' ');
+                        fullText += DOMPurify.sanitize(pageText) + '\n';
+                    }
+                    
+                    resolve(fullText);
+                } catch (error) {
+                    reject(new Error('Error reading PDF file: ' + error.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Error reading PDF file'));
+            reader.readAsArrayBuffer(file);
+        });
     }
     
     // Entity extraction
@@ -174,7 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 people.forEach(person => {
                     if (person && typeof person.text === 'function') {
                         entities.push({
-                            text: person.text(),
+                            text: DOMPurify.sanitize(person.text()),
                             type: 'person',
                             context: getContext(originalText, person.text())
                         });
@@ -188,7 +347,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 organizations.forEach(org => {
                     if (org && typeof org.text === 'function') {
                         entities.push({
-                            text: org.text(),
+                            text: DOMPurify.sanitize(org.text()),
                             type: 'organization',
                             context: getContext(originalText, org.text())
                         });
@@ -202,7 +361,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 places.forEach(place => {
                     if (place && typeof place.text === 'function') {
                         entities.push({
-                            text: place.text(),
+                            text: DOMPurify.sanitize(place.text()),
                             type: 'place',
                             context: getContext(originalText, place.text())
                         });
@@ -216,7 +375,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 dates.forEach(date => {
                     if (date && typeof date.text === 'function') {
                         entities.push({
-                            text: date.text(),
+                            text: DOMPurify.sanitize(date.text()),
                             type: 'date',
                             context: getContext(originalText, date.text())
                         });
@@ -230,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 values.forEach(value => {
                     if (value && typeof value.text === 'function') {
                         entities.push({
-                            text: value.text(),
+                            text: DOMPurify.sanitize(value.text()),
                             type: 'value',
                             context: getContext(originalText, value.text())
                         });
@@ -271,8 +430,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         orgs.forEach(org => {
                             if (!org || typeof org.text !== 'function') return;
                             relations.push({
-                                entity1: person.text(),
-                                entity2: org.text(),
+                                entity1: DOMPurify.sanitize(person.text()),
+                                entity2: DOMPurify.sanitize(org.text()),
                                 type: 'employment',
                                 relation: 'works for',
                                 context: getContext(originalText, `${person.text()} ${org.text()}`)
@@ -290,8 +449,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             places.forEach(place => {
                                 if (!place || typeof place.text !== 'function') return;
                                 relations.push({
-                                    entity1: org.text(),
-                                    entity2: place.text(),
+                                    entity1: DOMPurify.sanitize(org.text()),
+                                    entity2: DOMPurify.sanitize(place.text()),
                                     type: 'location',
                                     relation: 'located in',
                                     context: getContext(originalText, `${org.text()} ${place.text()}`)
@@ -308,8 +467,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         for (let j = i + 1; j < people.length; j++) {
                             if (!people[j] || typeof people[j].text !== 'function') continue;
                             relations.push({
-                                entity1: people[i].text(),
-                                entity2: people[j].text(),
+                                entity1: DOMPurify.sanitize(people[i].text()),
+                                entity2: DOMPurify.sanitize(people[j].text()),
                                 type: 'association',
                                 relation: 'associated with',
                                 context: getContext(originalText, `${people[i].text()} ${people[j].text()}`)
@@ -359,7 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     events.push({
-                        trigger: verbText,
+                        trigger: DOMPurify.sanitize(verbText),
                         type: eventType,
                         subjects: [], // No subject parsing in Compromise
                         objects: [],
@@ -393,7 +552,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         parsedDates.forEach(entry => {
             temporalExpressions.push({
-                text: entry.text,
+                text: DOMPurify.sanitize(entry.text),
                 type: "parsed_date",
                 start: entry.start || "unknown",
                 end: entry.end || "unknown",
@@ -437,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const matches = text.match(patternInfo.pattern) || [];
             matches.forEach(match => {
                 temporalExpressions.push({
-                    text: match,
+                    text: DOMPurify.sanitize(match),
                     type: patternInfo.type,
                     context: getContext(text, match)
                 });
@@ -445,56 +604,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return temporalExpressions;
-    }
-
-    // Manual POS tagging due to unavailability of a full NLP library via CDN
-    function extractPOSTags(text) {
-        const posTags = [];
-        
-        // Ensure valid input
-        if (!text || typeof text !== 'string' || text.trim() === "") {
-            console.warn("Invalid or empty text input");
-            return posTags;
-        }
-
-        // Tokenize text manually
-        const words = text.match(/\b\w+\b/g) || []; // Extract words safely
-
-        // Expanded regex-based tagging rules
-        const regexPatterns = [
-            { pattern: /^\d+$/, tag: 'CD' }, // Numbers
-            { pattern: /.*ing$/, tag: 'VBG' }, // Gerunds (e.g., "running")
-            { pattern: /.*ment$/, tag: 'NN' }, // Nouns (e.g., "development")
-            { pattern: /.*ful$/, tag: 'JJ' }, // Adjectives (e.g., "beautiful")
-            { pattern: /.*ly$/, tag: 'RB' }, // Adverbs (e.g., "quickly")
-            { pattern: /^(the|a|an)$/i, tag: 'DT' }, // Determiners
-            { pattern: /^(and|or|but)$/i, tag: 'CC' }, // Conjunctions
-            { pattern: /^(he|she|it|they|we|you|I)$/i, tag: 'PRP' }, // Pronouns
-            { pattern: /^(in|on|at|by|with|about)$/i, tag: 'IN' }, // Prepositions
-            { pattern: /^(run|jump|eat|say|talk|write|build|create|report)$/i, tag: 'VB' }, // Common Verbs
-            { pattern: /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/i, tag: 'DAY' }, // Days of the week
-            { pattern: /\b\d{4}-\d{2}-\d{2}\b/, tag: 'DATE' }, // ISO date format
-            { pattern: /\b(?:morning|afternoon|evening|night|midnight|noon)\b/i, tag: 'TIME' } // Time phrases
-        ];
-
-        // Apply regex-based POS tagging
-        words.forEach(word => {
-            let posTag = 'unknown';
-
-            regexPatterns.forEach(patternInfo => {
-                if (word.match(patternInfo.pattern)) {
-                    posTag = patternInfo.tag;
-                }
-            });
-
-            posTags.push({
-                text: word,
-                tag: posTag,
-                context: getContext(text, word)
-            });
-        });
-
-        return posTags;
     }
 
     // Extract POS tags manually (Penn Treebank inspired) since CDN not available
@@ -582,22 +691,22 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Loop through the patterns in order; assign the tag from the first match.
             for (let i = 0; i < regexPatterns.length; i++) {
-            if (regexPatterns[i].pattern.test(token)) {
-                posTag = regexPatterns[i].tag;
-                break; // break out once a match is found
-            }
+                if (regexPatterns[i].pattern.test(token)) {
+                    posTag = regexPatterns[i].tag;
+                    break; // break out once a match is found
+                }
             }
             
             // Add the result to the output array. (Assumes getContext() is defined elsewhere.)
             posTags.push({
-            text: token,
-            tag: posTag,
-            context: getContext(originalText, token)
+                text: DOMPurify.sanitize(token),
+                tag: posTag,
+                context: getContext(originalText, token)
             });
         });
         
         return posTags;
-        }
+    }
 
     // Get context around a match
     function getContext(fullText, matchText, contextLength = 30) {
@@ -615,7 +724,7 @@ document.addEventListener('DOMContentLoaded', function() {
             context = context + '...';
         }
         
-        return context;
+        return DOMPurify.sanitize(context);
     }
     
     // Display functions
@@ -754,106 +863,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // File upload handling
-    uploadBtn.addEventListener('click', () => {
-        fileInput.click();
-    });
-
-    fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        fileName.textContent = file.name;
-        processingSection.classList.remove('hidden');
-        statusText.textContent = 'Reading file...';
-        statusText.classList.add('processing');
-
-        try {
-            let text = '';
-            const fileType = file.name.split('.').pop().toLowerCase();
-
-            switch (fileType) {
-                case 'txt':
-                    text = await readTextFile(file);
-                    break;
-                case 'docx':
-                    text = await readDocxFile(file);
-                    break;
-                case 'pdf':
-                    text = await readPdfFile(file);
-                    break;
-                default:
-                    throw new Error('Unsupported file type');
-            }
-
-            inputText.value = text;
-            statusText.textContent = 'File loaded successfully';
-            statusText.classList.remove('processing');
-        } catch (error) {
-            console.error('Error reading file:', error);
-            statusText.textContent = 'Error reading file';
-            statusText.classList.remove('processing');
-            statusText.style.color = 'var(--error-color)';
-            alert('Error reading file: ' + error.message);
-        }
-    });
-
-    // File reading functions
-    async function readTextFile(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(new Error('Error reading text file'));
-            reader.readAsText(file);
-        });
-    }
-
-    async function readDocxFile(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const arrayBuffer = e.target.result;
-                    const result = await mammoth.extractRawText({ arrayBuffer });
-                    resolve(result.value);
-                } catch (error) {
-                    reject(new Error('Error reading DOCX file: ' + error.message));
-                }
-            };
-            reader.onerror = () => reject(new Error('Error reading DOCX file'));
-            reader.readAsArrayBuffer(file);
-        });
-    }
-
-    async function readPdfFile(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const typedarray = new Uint8Array(e.target.result);
-                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                    let fullText = '';
-                    
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const textContent = await page.getTextContent();
-                        const pageText = textContent.items.map(item => item.str).join(' ');
-                        fullText += pageText + '\n';
-                    }
-                    
-                    resolve(fullText);
-                } catch (error) {
-                    reject(new Error('Error reading PDF file: ' + error.message));
-                }
-            };
-            reader.onerror = () => reject(new Error('Error reading PDF file'));
-            reader.readAsArrayBuffer(file);
-        });
-    }
-    
     // Initialize with a simple text if needed
     if (inputText.value === '') {
-        inputText.value = `Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`;
+        inputText.value = DOMPurify.sanitize(`Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`);
     }
 
     // Knowledge Graph Visualization
@@ -974,9 +986,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 .duration(200)
                 .style('opacity', .9);
             tooltip.html(`
-                <strong>${d.id}</strong><br/>
-                Type: ${d.type}<br/>
-                Context: ${d.context}
+                <strong>${DOMPurify.sanitize(d.id)}</strong><br/>
+                Type: ${DOMPurify.sanitize(d.type)}<br/>
+                Context: ${DOMPurify.sanitize(d.context)}
             `)
                 .style('left', (event.pageX + 10) + 'px')
                 .style('top', (event.pageY - 28) + 'px');
@@ -1026,6 +1038,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const reportFormat = document.getElementById('reportFormat');
 
     downloadReport.addEventListener('click', () => {
+        if (isProcessing) {
+            showError('Please wait for current operation to complete');
+            return;
+        }
+        
         const format = reportFormat.value;
         const report = generateReport(format);
         downloadFile(report, format);
