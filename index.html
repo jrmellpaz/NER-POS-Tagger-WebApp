@@ -18,6 +18,13 @@
 
         <div class="input-section">
             <div class="text-input">
+                <div class="file-upload">
+                    <input type="file" id="fileInput" accept=".txt,.docx,.pdf" style="display: none;">
+                    <button id="uploadBtn" class="btn upload-btn">
+                        <i class="fas fa-file-upload"></i> Upload File
+                    </button>
+                    <span id="fileName" class="file-name"></span>
+                </div>
                 <textarea id="inputText" placeholder="Enter your text here..."></textarea>
                 <div class="controls">
                     <button id="analyzeBtn" class="btn analyze-btn">
@@ -118,10 +125,35 @@
         </footer>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/compromise@14.8.0/builds/compromise.min.js"></script>
-    <script src="https://unpkg.com/compromise-dates"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/universal-sentence-encoder@1.3.3"></script>
+    <!-- Load required libraries -->
+    <script>
+        // Function to handle script loading errors
+        function handleScriptError(error) {
+            console.error('Script loading error:', error);
+            alert('Error loading required libraries. Please check your internet connection and refresh the page.');
+        }
+    </script>
+
+    <!-- Load libraries with error handling -->
+    <script src="https://cdn.jsdelivr.net/npm/compromise@14.8.0/builds/compromise.min.js" 
+            onerror="handleScriptError('Failed to load Compromise.js')"></script>
+    <script src="https://unpkg.com/compromise-dates" 
+            onerror="handleScriptError('Failed to load Compromise-dates plugin')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js" 
+            onerror="handleScriptError('Failed to load TensorFlow.js')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/universal-sentence-encoder@1.3.3" 
+            onerror="handleScriptError('Failed to load Universal Sentence Encoder')"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" 
+            onerror="handleScriptError('Failed to load Mammoth.js')"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" 
+            onerror="handleScriptError('Failed to load PDF.js')"></script>
+
+    <!-- Initialize PDF.js worker -->
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
+    <!-- Load application script -->
     <script src="app.js"></script>
 </body>
 </html>

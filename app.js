@@ -1,9 +1,19 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Check if required libraries are loaded
+    if (typeof window.nlp === 'undefined') {
+        console.error('Compromise.js library not loaded!');
+        alert('Error: Required NLP library (Compromise.js) is not loaded. Please check your internet connection and refresh the page.');
+        return;
+    }
+
     // DOM Elements
     const inputText = document.getElementById('inputText');
     const analyzeBtn = document.getElementById('analyzeBtn');
     const sampleBtn = document.getElementById('sampleBtn');
     const clearBtn = document.getElementById('clearBtn');
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileName = document.getElementById('fileName');
     const processingSection = document.getElementById('processingSection');
     const progressBar = document.getElementById('progressBar');
     const progressText = document.getElementById('progressText');
@@ -81,7 +91,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Load NLP models (based on JS lightweight Compromise NLP library)
             const nlp = window.nlp;
             if (!nlp) {
-                throw new Error('NLP library not loaded');
+                throw new Error('NLP library not loaded. Please check if compromise.js is properly included.');
             }
 
             // Extend nlp with the dates plugin if available
@@ -132,10 +142,14 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Error during analysis:', error);
-            progressText.textContent = 'Error occurred during analysis';
+            console.error('Error stack:', error.stack);
+            progressText.textContent = `Error: ${error.message}`;
             statusText.textContent = 'Failed';
             statusText.classList.remove('processing');
             statusText.style.color = 'var(--error-color)';
+            
+            // Show error details in an alert
+            alert(`Analysis failed: ${error.message}\n\nPlease check the console for more details.`);
         }
     });
     
@@ -149,55 +163,80 @@ document.addEventListener('DOMContentLoaded', function() {
     function extractEntities(doc, originalText) {
         const entities = [];
         
-        // People
-        const people = doc.people();
-        people.forEach(person => {
-            entities.push({
-                text: person.text(),
-                type: 'person',
-                context: getContext(originalText, person.text())
-            });
-        });
-        
-        // Organizations
-        const organizations = doc.organizations();
-        organizations.forEach(org => {
-            entities.push({
-                text: org.text(),
-                type: 'organization',
-                context: getContext(originalText, org.text())
-            });
-        });
-        
-        // Places
-        const places = doc.places();
-        places.forEach(place => {
-            entities.push({
-                text: place.text(),
-                type: 'place',
-                context: getContext(originalText, place.text())
-            });
-        });
-        
-        // Dates
-        const dates = doc.dates();
-        dates.forEach(date => {
-            entities.push({
-                text: date.text(),
-                type: 'date',
-                context: getContext(originalText, date.text())
-            });
-        });
-        
-        // Values (numbers with units)
-        const values = doc.values();
-        values.forEach(value => {
-            entities.push({
-                text: value.text(),
-                type: 'value',
-                context: getContext(originalText, value.text())
-            });
-        });
+        try {
+            // People
+            const people = doc.people();
+            if (people && people.length > 0) {
+                people.forEach(person => {
+                    if (person && typeof person.text === 'function') {
+                        entities.push({
+                            text: person.text(),
+                            type: 'person',
+                            context: getContext(originalText, person.text())
+                        });
+                    }
+                });
+            }
+            
+            // Organizations
+            const organizations = doc.organizations();
+            if (organizations && organizations.length > 0) {
+                organizations.forEach(org => {
+                    if (org && typeof org.text === 'function') {
+                        entities.push({
+                            text: org.text(),
+                            type: 'organization',
+                            context: getContext(originalText, org.text())
+                        });
+                    }
+                });
+            }
+            
+            // Places
+            const places = doc.places();
+            if (places && places.length > 0) {
+                places.forEach(place => {
+                    if (place && typeof place.text === 'function') {
+                        entities.push({
+                            text: place.text(),
+                            type: 'place',
+                            context: getContext(originalText, place.text())
+                        });
+                    }
+                });
+            }
+            
+            // Dates
+            const dates = doc.dates();
+            if (dates && dates.length > 0) {
+                dates.forEach(date => {
+                    if (date && typeof date.text === 'function') {
+                        entities.push({
+                            text: date.text(),
+                            type: 'date',
+                            context: getContext(originalText, date.text())
+                        });
+                    }
+                });
+            }
+            
+            // Values (numbers with units)
+            const values = doc.values();
+            if (values && values.length > 0) {
+                values.forEach(value => {
+                    if (value && typeof value.text === 'function') {
+                        entities.push({
+                            text: value.text(),
+                            type: 'value',
+                            context: getContext(originalText, value.text())
+                        });
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error in extractEntities:', error);
+            throw new Error('Failed to extract entities: ' + error.message);
+        }
         
         return entities;
     }
@@ -205,61 +244,80 @@ document.addEventListener('DOMContentLoaded', function() {
     // Relation extraction (simplified)
     function extractRelations(doc, originalText) {
         const relations = [];
-        const sentences = doc.sentences();
         
-        // Simple relation extraction based on patterns
-        sentences.forEach(sentence => {
-            const text = sentence.text();
-            
-            // Person-Organization relations (employment)
-            const people = sentence.people();
-            const orgs = sentence.organizations();
-            
-            if (people.length > 0 && orgs.length > 0) {
-                people.forEach(person => {
-                    orgs.forEach(org => {
-                        relations.push({
-                            entity1: person.text(),
-                            entity2: org.text(),
-                            type: 'employment',
-                            relation: 'works for',
-                            context: getContext(originalText, `${person.text()} ${org.text()}`)
-                        });
-                    });
-                });
+        try {
+            const sentences = doc.sentences();
+            if (!sentences || !sentences.length) {
+                return relations;
             }
             
-            // Organization-Place relations (location)
-            if (orgs.length > 0) {
-                const places = sentence.places();
-                orgs.forEach(org => {
-                    places.forEach(place => {
-                        relations.push({
-                            entity1: org.text(),
-                            entity2: place.text(),
-                            type: 'location',
-                            relation: 'located in',
-                            context: getContext(originalText, `${org.text()} ${place.text()}`)
+            // Simple relation extraction based on patterns
+            sentences.forEach(sentence => {
+                if (!sentence || typeof sentence.text !== 'function') return;
+                
+                const text = sentence.text();
+                
+                // Person-Organization relations (employment)
+                const people = sentence.people();
+                const orgs = sentence.organizations();
+                
+                if (people && people.length > 0 && orgs && orgs.length > 0) {
+                    people.forEach(person => {
+                        if (!person || typeof person.text !== 'function') return;
+                        orgs.forEach(org => {
+                            if (!org || typeof org.text !== 'function') return;
+                            relations.push({
+                                entity1: person.text(),
+                                entity2: org.text(),
+                                type: 'employment',
+                                relation: 'works for',
+                                context: getContext(originalText, `${person.text()} ${org.text()}`)
+                            });
                         });
                     });
-                });
-            }
-            
-            // Person-Person relations (family or professional)
-            if (people.length > 1) {
-                for (let i = 0; i < people.length - 1; i++) {
-                    for (let j = i + 1; j < people.length; j++) {
-                        relations.push({
-                            entity1: people[i].text(),
-                            entity2: people[j].text(),
-                            type: 'association',
-                            relation: 'associated with',
-                            context: getContext(originalText, `${people[i].text()} ${people[j].text()}`)
+                }
+                
+                // Organization-Place relations (location)
+                if (orgs && orgs.length > 0) {
+                    const places = sentence.places();
+                    if (places && places.length > 0) {
+                        orgs.forEach(org => {
+                            if (!org || typeof org.text !== 'function') return;
+                            places.forEach(place => {
+                                if (!place || typeof place.text !== 'function') return;
+                                relations.push({
+                                    entity1: org.text(),
+                                    entity2: place.text(),
+                                    type: 'location',
+                                    relation: 'located in',
+                                    context: getContext(originalText, `${org.text()} ${place.text()}`)
+                                });
+                            });
                         });
                     }
                 }
-            }
-        });
+                
+                // Person-Person relations (family or professional)
+                if (people && people.length > 1) {
+                    for (let i = 0; i < people.length - 1; i++) {
+                        if (!people[i] || typeof people[i].text !== 'function') continue;
+                        for (let j = i + 1; j < people.length; j++) {
+                            if (!people[j] || typeof people[j].text !== 'function') continue;
+                            relations.push({
+                                entity1: people[i].text(),
+                                entity2: people[j].text(),
+                                type: 'association',
+                                relation: 'associated with',
+                                context: getContext(originalText, `${people[i].text()} ${people[j].text()}`)
+                            });
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error in extractRelations:', error);
+            throw new Error('Failed to extract relations: ' + error.message);
+        }
         
         return relations;
     }
@@ -267,35 +325,48 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event extraction (simplified)
     function extractEvents(doc, originalText) {
         const events = [];
-        const sentences = doc.sentences();
+        
+        try {
+            const sentences = doc.sentences();
+            if (!sentences || !sentences.length) {
+                return events;
+            }
 
-        // Simple event extraction based on verbs
-        sentences.forEach(sentence => {
-            const verbs = sentence.verbs();
-            verbs.forEach(verb => {
-                const verbText = verb.text();
+            // Simple event extraction based on verbs
+            sentences.forEach(sentence => {
+                if (!sentence || typeof sentence.verbs !== 'function') return;
+                
+                const verbs = sentence.verbs();
+                if (!verbs || !verbs.length) return;
 
-                // Determine event type based on trigger word
-                let eventType = 'action';
-                if (verbText.match(/said|announced|reported|stated/)) {
-                    eventType = 'statement';
-                } else if (verbText.match(/created|built|developed/)) {
-                    eventType = 'creation';
-                } else if (verbText.match(/increased|decreased|changed/)) {
-                    eventType = 'change';
-                }
+                verbs.forEach(verb => {
+                    if (!verb || typeof verb.text !== 'function') return;
+                    
+                    const verbText = verb.text();
 
-                // Since compromise doesn't support .subjects() or .objects(),
-                // we skip these or fill them with empty arrays
-                events.push({
-                    trigger: verbText,
-                    type: eventType,
-                    subjects: [], // No subject parsing in Compromise
-                    objects: [],
-                    context: getContext(originalText, verbText)
+                    // Determine event type based on trigger word
+                    let eventType = 'action';
+                    if (verbText.match(/said|announced|reported|stated/)) {
+                        eventType = 'statement';
+                    } else if (verbText.match(/created|built|developed/)) {
+                        eventType = 'creation';
+                    } else if (verbText.match(/increased|decreased|changed/)) {
+                        eventType = 'change';
+                    }
+
+                    events.push({
+                        trigger: verbText,
+                        type: eventType,
+                        subjects: [], // No subject parsing in Compromise
+                        objects: [],
+                        context: getContext(originalText, verbText)
+                    });
                 });
             });
-        });
+        } catch (error) {
+            console.error('Error in extractEvents:', error);
+            throw new Error('Failed to extract events: ' + error.message);
+        }
 
         return events;
     }
@@ -676,6 +747,103 @@ document.addEventListener('DOMContentLoaded', function() {
                 const entityType = entity.querySelector('.entity-type').classList.contains(type);
                 entity.style.display = entityType ? 'block' : 'none';
             }
+        });
+    }
+    
+    // File upload handling
+    uploadBtn.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        fileName.textContent = file.name;
+        processingSection.classList.remove('hidden');
+        statusText.textContent = 'Reading file...';
+        statusText.classList.add('processing');
+
+        try {
+            let text = '';
+            const fileType = file.name.split('.').pop().toLowerCase();
+
+            switch (fileType) {
+                case 'txt':
+                    text = await readTextFile(file);
+                    break;
+                case 'docx':
+                    text = await readDocxFile(file);
+                    break;
+                case 'pdf':
+                    text = await readPdfFile(file);
+                    break;
+                default:
+                    throw new Error('Unsupported file type');
+            }
+
+            inputText.value = text;
+            statusText.textContent = 'File loaded successfully';
+            statusText.classList.remove('processing');
+        } catch (error) {
+            console.error('Error reading file:', error);
+            statusText.textContent = 'Error reading file';
+            statusText.classList.remove('processing');
+            statusText.style.color = 'var(--error-color)';
+            alert('Error reading file: ' + error.message);
+        }
+    });
+
+    // File reading functions
+    async function readTextFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(new Error('Error reading text file'));
+            reader.readAsText(file);
+        });
+    }
+
+    async function readDocxFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const arrayBuffer = e.target.result;
+                    const result = await mammoth.extractRawText({ arrayBuffer });
+                    resolve(result.value);
+                } catch (error) {
+                    reject(new Error('Error reading DOCX file: ' + error.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Error reading DOCX file'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    async function readPdfFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const typedarray = new Uint8Array(e.target.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    let fullText = '';
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items.map(item => item.str).join(' ');
+                        fullText += pageText + '\n';
+                    }
+                    
+                    resolve(fullText);
+                } catch (error) {
+                    reject(new Error('Error reading PDF file: ' + error.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Error reading PDF file'));
+            reader.readAsArrayBuffer(file);
         });
     }
     
