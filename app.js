@@ -1020,4 +1020,247 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize graph when the page loads
     initializeGraph();
+
+    // Report Generation and Download
+    const downloadReport = document.getElementById('downloadReport');
+    const reportFormat = document.getElementById('reportFormat');
+
+    downloadReport.addEventListener('click', () => {
+        const format = reportFormat.value;
+        const report = generateReport(format);
+        downloadFile(report, format);
+    });
+
+    function generateReport(format) {
+        const report = {
+            timestamp: new Date().toISOString(),
+            inputText: inputText.value,
+            entities: graphData.nodes,
+            relations: graphData.links,
+            processingTime: processingTime.textContent,
+            statistics: {
+                entityCount: entitiesCount.textContent,
+                relationCount: relationsCount.textContent
+            }
+        };
+
+        switch (format) {
+            case 'json':
+                return JSON.stringify(report, null, 2);
+            
+            case 'csv':
+                return generateCSV(report);
+            
+            case 'txt':
+                return generateTextReport(report);
+            
+            case 'pdf':
+                return generatePDF(report);
+            
+            default:
+                return JSON.stringify(report, null, 2);
+        }
+    }
+
+    function generateCSV(report) {
+        const lines = [];
+        
+        // Add metadata
+        lines.push('Analysis Report');
+        lines.push(`Generated: ${report.timestamp}`);
+        lines.push(`Processing Time: ${report.processingTime}`);
+        lines.push(`Entity Count: ${report.statistics.entityCount}`);
+        lines.push(`Relation Count: ${report.statistics.relationCount}`);
+        lines.push('');
+
+        // Add entities
+        lines.push('Entities');
+        lines.push('Text,Type,Context');
+        report.entities.forEach(entity => {
+            lines.push(`${entity.id},${entity.type},"${entity.context.replace(/"/g, '""')}"`);
+        });
+        lines.push('');
+
+        // Add relations
+        lines.push('Relations');
+        lines.push('Source,Target,Type,Relation');
+        report.relations.forEach(relation => {
+            lines.push(`${relation.source},${relation.target},${relation.type},${relation.relation}`);
+        });
+
+        return lines.join('\n');
+    }
+
+    function generateTextReport(report) {
+        const lines = [];
+        
+        // Add header
+        lines.push('=== Text Analysis Report ===');
+        lines.push(`Generated: ${report.timestamp}`);
+        lines.push(`Processing Time: ${report.processingTime}`);
+        lines.push('');
+
+        // Add statistics
+        lines.push('=== Statistics ===');
+        lines.push(`Total Entities: ${report.statistics.entityCount}`);
+        lines.push(`Total Relations: ${report.statistics.relationCount}`);
+        lines.push('');
+
+        // Add entities
+        lines.push('=== Entities ===');
+        report.entities.forEach(entity => {
+            lines.push(`- ${entity.id} (${entity.type})`);
+            lines.push(`  Context: ${entity.context}`);
+            lines.push('');
+        });
+
+        // Add relations
+        lines.push('=== Relations ===');
+        report.relations.forEach(relation => {
+            lines.push(`- ${relation.source} ${relation.relation} ${relation.target}`);
+            lines.push(`  Type: ${relation.type}`);
+            lines.push('');
+        });
+
+        return lines.join('\n');
+    }
+
+    function generatePDF(report) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Set font styles
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(20);
+        doc.setTextColor(0, 0, 0);
+        
+        // Add title
+        doc.text("Text Analysis Report", 105, 30, { align: "center" });
+        
+        // Add timestamp and statistics
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Generated: ${report.timestamp}`, 20, 45);
+        doc.text(`Processing Time: ${report.processingTime}`, 20, 55);
+        doc.text(`Total Entities: ${report.statistics.entityCount}`, 20, 65);
+        doc.text(`Total Relations: ${report.statistics.relationCount}`, 20, 75);
+        
+        // Add entities table
+        doc.setFont("helvetica", "bold");
+        doc.text("Entities", 20, 90);
+        
+        const entityData = report.entities.map(entity => [
+            entity.id,
+            entity.type,
+            entity.context
+        ]);
+        
+        doc.autoTable({
+            startY: 95,
+            head: [['Entity', 'Type', 'Context']],
+            body: entityData,
+            theme: 'grid',
+            headStyles: { fillColor: [74, 111, 165] },
+            styles: { fontSize: 10, cellPadding: 5 },
+            columnStyles: {
+                0: { cellWidth: 50 },
+                1: { cellWidth: 30 },
+                2: { cellWidth: 'auto' }
+            }
+        });
+        
+        // Add relations table
+        const relationsY = doc.lastAutoTable.finalY + 20;
+        doc.setFont("helvetica", "bold");
+        doc.text("Relations", 20, relationsY);
+        
+        const relationData = report.relations.map(relation => [
+            relation.source,
+            relation.target,
+            relation.type,
+            relation.relation
+        ]);
+        
+        doc.autoTable({
+            startY: relationsY + 5,
+            head: [['Source', 'Target', 'Type', 'Relation']],
+            body: relationData,
+            theme: 'grid',
+            headStyles: { fillColor: [74, 111, 165] },
+            styles: { fontSize: 10, cellPadding: 5 },
+            columnStyles: {
+                0: { cellWidth: 40 },
+                1: { cellWidth: 40 },
+                2: { cellWidth: 30 },
+                3: { cellWidth: 'auto' }
+            }
+        });
+        
+        // Add original text with page breaks
+        const textY = doc.lastAutoTable.finalY + 20;
+        doc.setFont("helvetica", "bold");
+        doc.text("Original Text", 20, textY);
+        
+        doc.setFont("helvetica", "normal");
+        const splitText = doc.splitTextToSize(report.inputText, 170);
+        let currentY = textY + 10;
+        const pageHeight = doc.internal.pageSize.height;
+        const margin = 20;
+        
+        // Function to add footer to each page
+        const addFooter = () => {
+            const footerY = pageHeight - margin;
+            doc.setFontSize(10);
+            doc.setTextColor(100, 100, 100);
+            doc.text("Advanced Text Analysis Toolkit © 2025 | Using the lightweight Compromise.js NLP library", 105, footerY, { align: "center" });
+        };
+        
+        // Add footer to first page
+        addFooter();
+        
+        // Add text with page breaks
+        for (let i = 0; i < splitText.length; i++) {
+            if (currentY > pageHeight - margin - 10) {
+                doc.addPage();
+                currentY = margin;
+                addFooter();
+            }
+            doc.text(splitText[i], 20, currentY);
+            currentY += 7;
+        }
+        
+        return doc;
+    }
+
+    function downloadFile(content, format) {
+        if (format === 'pdf') {
+            content.save(`text-analysis-report-${new Date().toISOString().slice(0,10)}.pdf`);
+            return;
+        }
+
+        const blob = new Blob([content], { type: getMimeType(format) });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `text-analysis-report-${new Date().toISOString().slice(0,10)}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+
+    function getMimeType(format) {
+        switch (format) {
+            case 'json':
+                return 'application/json';
+            case 'csv':
+                return 'text/csv';
+            case 'txt':
+                return 'text/plain';
+            case 'pdf':
+                return 'application/pdf';
+            default:
+                return 'text/plain';
+        }
+    }
 });
