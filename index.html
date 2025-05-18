@@ -72,6 +72,7 @@
                 <button class="tab-btn" data-tab="events"><i class="fas fa-calendar-alt"></i> Events</button>
                 <button class="tab-btn" data-tab="temporal"><i class="fas fa-clock"></i> Temporal</button>
                 <button class="tab-btn" data-tab="pos"><i class="fas fa-tags"></i> POS Tags</button>
+                <button class="tab-btn" data-tab="knowledge-graph"><i class="fas fa-network-wired"></i> Knowledge Graph</button>
             </div>
 
             <div class="tab-content active" id="entities">
@@ -118,6 +119,20 @@
                 </div>
                 <div class="results-container" id="posResults"></div>
             </div>
+
+            <div class="tab-content" id="knowledge-graph">
+                <div class="results-header">
+                    <h3><i class="fas fa-network-wired"></i> Knowledge Graph</h3>
+                    <div class="graph-controls">
+                        <button id="zoomIn" class="btn graph-btn"><i class="fas fa-search-plus"></i></button>
+                        <button id="zoomOut" class="btn graph-btn"><i class="fas fa-search-minus"></i></button>
+                        <button id="resetZoom" class="btn graph-btn"><i class="fas fa-sync"></i></button>
+                    </div>
+                </div>
+                <div class="graph-container">
+                    <div id="graphVisualization"></div>
+                </div>
+            </div>
         </div>
 
         <footer>
@@ -155,5 +170,8 @@
 
     <!-- Load application script -->
     <script src="app.js"></script>
+
+    <!-- Add D3.js library -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 </body>
 </html>

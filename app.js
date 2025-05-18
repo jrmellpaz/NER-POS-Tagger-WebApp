@@ -115,6 +115,10 @@ document.addEventListener('DOMContentLoaded', function() {
             displayRelations(relations);
             relationsCount.textContent = relations.length;
             
+            // Update knowledge graph
+            updateProgress(75, 'Updating knowledge graph...');
+            updateGraph(entities, relations);
+            
             // Extract events
             updateProgress(80, 'Extracting events...');
             const events = extractEvents(doc, text);
@@ -851,4 +855,169 @@ document.addEventListener('DOMContentLoaded', function() {
     if (inputText.value === '') {
         inputText.value = `Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`;
     }
+
+    // Knowledge Graph Visualization
+    let graphData = {
+        nodes: [],
+        links: []
+    };
+
+    let simulation = null;
+    let svg = null;
+    let tooltip = null;
+
+    function initializeGraph() {
+        // Create SVG container
+        svg = d3.select('#graphVisualization')
+            .append('svg')
+            .attr('width', '100%')
+            .attr('height', '100%')
+            .call(d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on('zoom', (event) => {
+                    svg.select('g').attr('transform', event.transform);
+                }));
+
+        // Add main group for zooming
+        svg.append('g');
+
+        // Create tooltip
+        tooltip = d3.select('body')
+            .append('div')
+            .attr('class', 'tooltip')
+            .style('opacity', 0);
+
+        // Add zoom controls
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            svg.transition().duration(750).call(d3.zoom().scaleBy, 1.3);
+        });
+
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            svg.transition().duration(750).call(d3.zoom().scaleBy, 0.7);
+        });
+
+        document.getElementById('resetZoom').addEventListener('click', () => {
+            svg.transition().duration(750).call(d3.zoom().transform, d3.zoomIdentity);
+        });
+    }
+
+    function updateGraph(entities, relations) {
+        // Clear existing graph
+        if (svg) {
+            svg.selectAll('*').remove();
+            svg.append('g');
+        } else {
+            initializeGraph();
+        }
+
+        // Prepare nodes from entities
+        const nodes = entities.map(entity => ({
+            id: entity.text,
+            type: entity.type,
+            context: entity.context
+        }));
+
+        // Prepare links from relations
+        const links = relations.map(relation => ({
+            source: relation.entity1,
+            target: relation.entity2,
+            type: relation.type,
+            relation: relation.relation
+        }));
+
+        // Update graph data
+        graphData = { nodes, links };
+
+        // Create force simulation
+        simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+            .force('charge', d3.forceManyBody().strength(-300))
+            .force('center', d3.forceCenter(
+                document.getElementById('graphVisualization').clientWidth / 2,
+                document.getElementById('graphVisualization').clientHeight / 2
+            ));
+
+        // Create links
+        const link = svg.select('g')
+            .selectAll('.link')
+            .data(links)
+            .enter()
+            .append('line')
+            .attr('class', d => `link link-${d.type}`)
+            .attr('marker-end', 'url(#arrow)');
+
+        // Create nodes
+        const node = svg.select('g')
+            .selectAll('.node')
+            .data(nodes)
+            .enter()
+            .append('g')
+            .attr('class', d => `node node-${d.type}`)
+            .call(d3.drag()
+                .on('start', dragstarted)
+                .on('drag', dragged)
+                .on('end', dragended));
+
+        // Add circles to nodes
+        node.append('circle')
+            .attr('r', 8);
+
+        // Add labels to nodes
+        node.append('text')
+            .text(d => d.id)
+            .attr('x', 12)
+            .attr('y', 4);
+
+        // Add tooltips
+        node.on('mouseover', function(event, d) {
+            tooltip.transition()
+                .duration(200)
+                .style('opacity', .9);
+            tooltip.html(`
+                <strong>${d.id}</strong><br/>
+                Type: ${d.type}<br/>
+                Context: ${d.context}
+            `)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mouseout', function() {
+            tooltip.transition()
+                .duration(500)
+                .style('opacity', 0);
+        });
+
+        // Update positions on simulation tick
+        simulation.on('tick', () => {
+            link
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+
+            node
+                .attr('transform', d => `translate(${d.x},${d.y})`);
+        });
+    }
+
+    // Drag functions
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    // Initialize graph when the page loads
+    initializeGraph();
 });
