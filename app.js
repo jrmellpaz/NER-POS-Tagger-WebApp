@@ -1,9 +1,24 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Security and performance state
+    let isProcessing = false;
+    let lastProcessTime = 0;
+    const PROCESS_COOLDOWN = 5000; // 5 seconds cooldown
+    
+    // Check if required libraries are loaded
+    if (typeof window.nlp === 'undefined') {
+        console.error('Compromise.js library not loaded!');
+        alert('Error: Required NLP library (Compromise.js) is not loaded. Please check your internet connection and refresh the page.');
+        return;
+    }
+
     // DOM Elements
     const inputText = document.getElementById('inputText');
     const analyzeBtn = document.getElementById('analyzeBtn');
     const sampleBtn = document.getElementById('sampleBtn');
     const clearBtn = document.getElementById('clearBtn');
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileName = document.getElementById('fileName');
     const processingSection = document.getElementById('processingSection');
     const progressBar = document.getElementById('progressBar');
     const progressText = document.getElementById('progressText');
@@ -14,7 +29,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabButtons = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     const entityTypeFilter = document.getElementById('entityTypeFilter');
-    
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
+
     // Tab switching functionality
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
@@ -32,20 +49,33 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load sample text
     sampleBtn.addEventListener('click', function() {
+        if (isProcessing) {
+            showError('Please wait for current operation to complete');
+            return;
+        }
+        
+        showLoading('Loading sample text...');
+        
         fetch('https://baconipsum.com/api/?type=meat-and-filler&paras=2&format=text')
             .then(response => response.text())
             .then(text => {
-                inputText.value = text;
+                inputText.value = DOMPurify.sanitize(text);
+                hideLoading();
             })
             .catch(error => {
                 console.error('Error loading sample text:', error);
                 // Fallback sample text
-                inputText.value = `Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`;
+                inputText.value = DOMPurify.sanitize(`Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`);
+                hideLoading();
             });
     });
     
     // Clear text
     clearBtn.addEventListener('click', function() {
+        if (isProcessing) {
+            showError('Please wait for current operation to complete');
+            return;
+        }
         inputText.value = '';
     });
     
@@ -81,7 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Load NLP models (based on JS lightweight Compromise NLP library)
             const nlp = window.nlp;
             if (!nlp) {
-                throw new Error('NLP library not loaded');
+                throw new Error('NLP library not loaded. Please check if compromise.js is properly included.');
             }
 
             // Extend nlp with the dates plugin if available
@@ -104,6 +134,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const relations = extractRelations(doc, text);
             displayRelations(relations);
             relationsCount.textContent = relations.length;
+            
+            // Update knowledge graph
+            updateProgress(75, 'Updating knowledge graph...');
+            updateGraph(entities, relations);
             
             // Extract events
             updateProgress(80, 'Extracting events...');
@@ -132,72 +166,240 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Error during analysis:', error);
-            progressText.textContent = 'Error occurred during analysis';
+            console.error('Error stack:', error.stack);
+            progressText.textContent = `Error: ${error.message}`;
             statusText.textContent = 'Failed';
             statusText.classList.remove('processing');
             statusText.style.color = 'var(--error-color)';
+            
+            // Show error details in an alert
+            alert(`Analysis failed: ${error.message}\n\nPlease check the console for more details.`);
         }
     });
     
     // Helper function to update progress
     function updateProgress(percent, message) {
         progressBar.style.width = `${percent}%`;
-        progressText.textContent = message;
+        progressText.textContent = DOMPurify.sanitize(message);
+    }
+    
+    // Show loading overlay
+    function showLoading(message) {
+        loadingText.textContent = DOMPurify.sanitize(message);
+        loadingOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    // Hide loading overlay
+    function hideLoading() {
+        loadingOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    
+    // Show error message
+    function showError(message) {
+        alert(DOMPurify.sanitize(message));
+    }
+    
+    // File upload handling with validation
+    uploadBtn.addEventListener('click', () => {
+        if (isProcessing) {
+            showError('Please wait for current operation to complete');
+            return;
+        }
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // File validation
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+        const validTypes = ['text/plain', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        
+        if (file.size > MAX_FILE_SIZE) {
+            showError('File size exceeds 5MB limit');
+            fileInput.value = '';
+            return;
+        }
+        
+        if (!validTypes.includes(file.type)) {
+            showError('Invalid file type. Please upload a .txt, .docx, or .pdf file');
+            fileInput.value = '';
+            return;
+        }
+
+        fileName.textContent = DOMPurify.sanitize(file.name);
+        processingSection.classList.remove('hidden');
+        statusText.textContent = 'Reading file...';
+        statusText.classList.add('processing');
+        showLoading('Reading uploaded file...');
+
+        try {
+            let text = '';
+            const fileType = file.name.split('.').pop().toLowerCase();
+
+            switch (fileType) {
+                case 'txt':
+                    text = await readTextFile(file);
+                    break;
+                case 'docx':
+                    text = await readDocxFile(file);
+                    break;
+                case 'pdf':
+                    text = await readPdfFile(file);
+                    break;
+                default:
+                    throw new Error('Unsupported file type');
+            }
+
+            inputText.value = DOMPurify.sanitize(text);
+            statusText.textContent = 'File loaded successfully';
+            statusText.classList.remove('processing');
+            hideLoading();
+        } catch (error) {
+            console.error('Error reading file:', error);
+            statusText.textContent = 'Error reading file';
+            statusText.classList.remove('processing');
+            statusText.style.color = 'var(--error-color)';
+            hideLoading();
+            showError('Error reading file: ' + error.message);
+            fileInput.value = '';
+        }
+    });
+
+    // File reading functions
+    async function readTextFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(DOMPurify.sanitize(e.target.result));
+            reader.onerror = (e) => reject(new Error('Error reading text file'));
+            reader.readAsText(file);
+        });
+    }
+
+    async function readDocxFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const arrayBuffer = e.target.result;
+                    const result = await mammoth.extractRawText({ arrayBuffer });
+                    resolve(DOMPurify.sanitize(result.value));
+                } catch (error) {
+                    reject(new Error('Error reading DOCX file: ' + error.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Error reading DOCX file'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    async function readPdfFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const typedarray = new Uint8Array(e.target.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    let fullText = '';
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items.map(item => item.str).join(' ');
+                        fullText += DOMPurify.sanitize(pageText) + '\n';
+                    }
+                    
+                    resolve(fullText);
+                } catch (error) {
+                    reject(new Error('Error reading PDF file: ' + error.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Error reading PDF file'));
+            reader.readAsArrayBuffer(file);
+        });
     }
     
     // Entity extraction
     function extractEntities(doc, originalText) {
         const entities = [];
         
-        // People
-        const people = doc.people();
-        people.forEach(person => {
-            entities.push({
-                text: person.text(),
-                type: 'person',
-                context: getContext(originalText, person.text())
-            });
-        });
-        
-        // Organizations
-        const organizations = doc.organizations();
-        organizations.forEach(org => {
-            entities.push({
-                text: org.text(),
-                type: 'organization',
-                context: getContext(originalText, org.text())
-            });
-        });
-        
-        // Places
-        const places = doc.places();
-        places.forEach(place => {
-            entities.push({
-                text: place.text(),
-                type: 'place',
-                context: getContext(originalText, place.text())
-            });
-        });
-        
-        // Dates
-        const dates = doc.dates();
-        dates.forEach(date => {
-            entities.push({
-                text: date.text(),
-                type: 'date',
-                context: getContext(originalText, date.text())
-            });
-        });
-        
-        // Values (numbers with units)
-        const values = doc.values();
-        values.forEach(value => {
-            entities.push({
-                text: value.text(),
-                type: 'value',
-                context: getContext(originalText, value.text())
-            });
-        });
+        try {
+            // People
+            const people = doc.people();
+            if (people && people.length > 0) {
+                people.forEach(person => {
+                    if (person && typeof person.text === 'function') {
+                        entities.push({
+                            text: DOMPurify.sanitize(person.text()),
+                            type: 'person',
+                            context: getContext(originalText, person.text())
+                        });
+                    }
+                });
+            }
+            
+            // Organizations
+            const organizations = doc.organizations();
+            if (organizations && organizations.length > 0) {
+                organizations.forEach(org => {
+                    if (org && typeof org.text === 'function') {
+                        entities.push({
+                            text: DOMPurify.sanitize(org.text()),
+                            type: 'organization',
+                            context: getContext(originalText, org.text())
+                        });
+                    }
+                });
+            }
+            
+            // Places
+            const places = doc.places();
+            if (places && places.length > 0) {
+                places.forEach(place => {
+                    if (place && typeof place.text === 'function') {
+                        entities.push({
+                            text: DOMPurify.sanitize(place.text()),
+                            type: 'place',
+                            context: getContext(originalText, place.text())
+                        });
+                    }
+                });
+            }
+            
+            // Dates
+            const dates = doc.dates();
+            if (dates && dates.length > 0) {
+                dates.forEach(date => {
+                    if (date && typeof date.text === 'function') {
+                        entities.push({
+                            text: DOMPurify.sanitize(date.text()),
+                            type: 'date',
+                            context: getContext(originalText, date.text())
+                        });
+                    }
+                });
+            }
+            
+            // Values (numbers with units)
+            const values = doc.values();
+            if (values && values.length > 0) {
+                values.forEach(value => {
+                    if (value && typeof value.text === 'function') {
+                        entities.push({
+                            text: DOMPurify.sanitize(value.text()),
+                            type: 'value',
+                            context: getContext(originalText, value.text())
+                        });
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error in extractEntities:', error);
+            throw new Error('Failed to extract entities: ' + error.message);
+        }
         
         return entities;
     }
@@ -205,61 +407,80 @@ document.addEventListener('DOMContentLoaded', function() {
     // Relation extraction (simplified)
     function extractRelations(doc, originalText) {
         const relations = [];
-        const sentences = doc.sentences();
         
-        // Simple relation extraction based on patterns
-        sentences.forEach(sentence => {
-            const text = sentence.text();
-            
-            // Person-Organization relations (employment)
-            const people = sentence.people();
-            const orgs = sentence.organizations();
-            
-            if (people.length > 0 && orgs.length > 0) {
-                people.forEach(person => {
-                    orgs.forEach(org => {
-                        relations.push({
-                            entity1: person.text(),
-                            entity2: org.text(),
-                            type: 'employment',
-                            relation: 'works for',
-                            context: getContext(originalText, `${person.text()} ${org.text()}`)
-                        });
-                    });
-                });
+        try {
+            const sentences = doc.sentences();
+            if (!sentences || !sentences.length) {
+                return relations;
             }
             
-            // Organization-Place relations (location)
-            if (orgs.length > 0) {
-                const places = sentence.places();
-                orgs.forEach(org => {
-                    places.forEach(place => {
-                        relations.push({
-                            entity1: org.text(),
-                            entity2: place.text(),
-                            type: 'location',
-                            relation: 'located in',
-                            context: getContext(originalText, `${org.text()} ${place.text()}`)
+            // Simple relation extraction based on patterns
+            sentences.forEach(sentence => {
+                if (!sentence || typeof sentence.text !== 'function') return;
+                
+                const text = sentence.text();
+                
+                // Person-Organization relations (employment)
+                const people = sentence.people();
+                const orgs = sentence.organizations();
+                
+                if (people && people.length > 0 && orgs && orgs.length > 0) {
+                    people.forEach(person => {
+                        if (!person || typeof person.text !== 'function') return;
+                        orgs.forEach(org => {
+                            if (!org || typeof org.text !== 'function') return;
+                            relations.push({
+                                entity1: DOMPurify.sanitize(person.text()),
+                                entity2: DOMPurify.sanitize(org.text()),
+                                type: 'employment',
+                                relation: 'works for',
+                                context: getContext(originalText, `${person.text()} ${org.text()}`)
+                            });
                         });
                     });
-                });
-            }
-            
-            // Person-Person relations (family or professional)
-            if (people.length > 1) {
-                for (let i = 0; i < people.length - 1; i++) {
-                    for (let j = i + 1; j < people.length; j++) {
-                        relations.push({
-                            entity1: people[i].text(),
-                            entity2: people[j].text(),
-                            type: 'association',
-                            relation: 'associated with',
-                            context: getContext(originalText, `${people[i].text()} ${people[j].text()}`)
+                }
+                
+                // Organization-Place relations (location)
+                if (orgs && orgs.length > 0) {
+                    const places = sentence.places();
+                    if (places && places.length > 0) {
+                        orgs.forEach(org => {
+                            if (!org || typeof org.text !== 'function') return;
+                            places.forEach(place => {
+                                if (!place || typeof place.text !== 'function') return;
+                                relations.push({
+                                    entity1: DOMPurify.sanitize(org.text()),
+                                    entity2: DOMPurify.sanitize(place.text()),
+                                    type: 'location',
+                                    relation: 'located in',
+                                    context: getContext(originalText, `${org.text()} ${place.text()}`)
+                                });
+                            });
                         });
                     }
                 }
-            }
-        });
+                
+                // Person-Person relations (family or professional)
+                if (people && people.length > 1) {
+                    for (let i = 0; i < people.length - 1; i++) {
+                        if (!people[i] || typeof people[i].text !== 'function') continue;
+                        for (let j = i + 1; j < people.length; j++) {
+                            if (!people[j] || typeof people[j].text !== 'function') continue;
+                            relations.push({
+                                entity1: DOMPurify.sanitize(people[i].text()),
+                                entity2: DOMPurify.sanitize(people[j].text()),
+                                type: 'association',
+                                relation: 'associated with',
+                                context: getContext(originalText, `${people[i].text()} ${people[j].text()}`)
+                            });
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error in extractRelations:', error);
+            throw new Error('Failed to extract relations: ' + error.message);
+        }
         
         return relations;
     }
@@ -267,35 +488,48 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event extraction (simplified)
     function extractEvents(doc, originalText) {
         const events = [];
-        const sentences = doc.sentences();
+        
+        try {
+            const sentences = doc.sentences();
+            if (!sentences || !sentences.length) {
+                return events;
+            }
 
-        // Simple event extraction based on verbs
-        sentences.forEach(sentence => {
-            const verbs = sentence.verbs();
-            verbs.forEach(verb => {
-                const verbText = verb.text();
+            // Simple event extraction based on verbs
+            sentences.forEach(sentence => {
+                if (!sentence || typeof sentence.verbs !== 'function') return;
+                
+                const verbs = sentence.verbs();
+                if (!verbs || !verbs.length) return;
 
-                // Determine event type based on trigger word
-                let eventType = 'action';
-                if (verbText.match(/said|announced|reported|stated/)) {
-                    eventType = 'statement';
-                } else if (verbText.match(/created|built|developed/)) {
-                    eventType = 'creation';
-                } else if (verbText.match(/increased|decreased|changed/)) {
-                    eventType = 'change';
-                }
+                verbs.forEach(verb => {
+                    if (!verb || typeof verb.text !== 'function') return;
+                    
+                    const verbText = verb.text();
 
-                // Since compromise doesn't support .subjects() or .objects(),
-                // we skip these or fill them with empty arrays
-                events.push({
-                    trigger: verbText,
-                    type: eventType,
-                    subjects: [], // No subject parsing in Compromise
-                    objects: [],
-                    context: getContext(originalText, verbText)
+                    // Determine event type based on trigger word
+                    let eventType = 'action';
+                    if (verbText.match(/said|announced|reported|stated/)) {
+                        eventType = 'statement';
+                    } else if (verbText.match(/created|built|developed/)) {
+                        eventType = 'creation';
+                    } else if (verbText.match(/increased|decreased|changed/)) {
+                        eventType = 'change';
+                    }
+
+                    events.push({
+                        trigger: DOMPurify.sanitize(verbText),
+                        type: eventType,
+                        subjects: [], // No subject parsing in Compromise
+                        objects: [],
+                        context: getContext(originalText, verbText)
+                    });
                 });
             });
-        });
+        } catch (error) {
+            console.error('Error in extractEvents:', error);
+            throw new Error('Failed to extract events: ' + error.message);
+        }
 
         return events;
     }
@@ -318,7 +552,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         parsedDates.forEach(entry => {
             temporalExpressions.push({
-                text: entry.text,
+                text: DOMPurify.sanitize(entry.text),
                 type: "parsed_date",
                 start: entry.start || "unknown",
                 end: entry.end || "unknown",
@@ -362,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const matches = text.match(patternInfo.pattern) || [];
             matches.forEach(match => {
                 temporalExpressions.push({
-                    text: match,
+                    text: DOMPurify.sanitize(match),
                     type: patternInfo.type,
                     context: getContext(text, match)
                 });
@@ -370,56 +604,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return temporalExpressions;
-    }
-
-    // Manual POS tagging due to unavailability of a full NLP library via CDN
-    function extractPOSTags(text) {
-        const posTags = [];
-        
-        // Ensure valid input
-        if (!text || typeof text !== 'string' || text.trim() === "") {
-            console.warn("Invalid or empty text input");
-            return posTags;
-        }
-
-        // Tokenize text manually
-        const words = text.match(/\b\w+\b/g) || []; // Extract words safely
-
-        // Expanded regex-based tagging rules
-        const regexPatterns = [
-            { pattern: /^\d+$/, tag: 'CD' }, // Numbers
-            { pattern: /.*ing$/, tag: 'VBG' }, // Gerunds (e.g., "running")
-            { pattern: /.*ment$/, tag: 'NN' }, // Nouns (e.g., "development")
-            { pattern: /.*ful$/, tag: 'JJ' }, // Adjectives (e.g., "beautiful")
-            { pattern: /.*ly$/, tag: 'RB' }, // Adverbs (e.g., "quickly")
-            { pattern: /^(the|a|an)$/i, tag: 'DT' }, // Determiners
-            { pattern: /^(and|or|but)$/i, tag: 'CC' }, // Conjunctions
-            { pattern: /^(he|she|it|they|we|you|I)$/i, tag: 'PRP' }, // Pronouns
-            { pattern: /^(in|on|at|by|with|about)$/i, tag: 'IN' }, // Prepositions
-            { pattern: /^(run|jump|eat|say|talk|write|build|create|report)$/i, tag: 'VB' }, // Common Verbs
-            { pattern: /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/i, tag: 'DAY' }, // Days of the week
-            { pattern: /\b\d{4}-\d{2}-\d{2}\b/, tag: 'DATE' }, // ISO date format
-            { pattern: /\b(?:morning|afternoon|evening|night|midnight|noon)\b/i, tag: 'TIME' } // Time phrases
-        ];
-
-        // Apply regex-based POS tagging
-        words.forEach(word => {
-            let posTag = 'unknown';
-
-            regexPatterns.forEach(patternInfo => {
-                if (word.match(patternInfo.pattern)) {
-                    posTag = patternInfo.tag;
-                }
-            });
-
-            posTags.push({
-                text: word,
-                tag: posTag,
-                context: getContext(text, word)
-            });
-        });
-
-        return posTags;
     }
 
     // Extract POS tags manually (Penn Treebank inspired) since CDN not available
@@ -507,22 +691,22 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Loop through the patterns in order; assign the tag from the first match.
             for (let i = 0; i < regexPatterns.length; i++) {
-            if (regexPatterns[i].pattern.test(token)) {
-                posTag = regexPatterns[i].tag;
-                break; // break out once a match is found
-            }
+                if (regexPatterns[i].pattern.test(token)) {
+                    posTag = regexPatterns[i].tag;
+                    break; // break out once a match is found
+                }
             }
             
             // Add the result to the output array. (Assumes getContext() is defined elsewhere.)
             posTags.push({
-            text: token,
-            tag: posTag,
-            context: getContext(originalText, token)
+                text: DOMPurify.sanitize(token),
+                tag: posTag,
+                context: getContext(originalText, token)
             });
         });
         
         return posTags;
-        }
+    }
 
     // Get context around a match
     function getContext(fullText, matchText, contextLength = 30) {
@@ -540,7 +724,7 @@ document.addEventListener('DOMContentLoaded', function() {
             context = context + '...';
         }
         
-        return context;
+        return DOMPurify.sanitize(context);
     }
     
     // Display functions
@@ -681,6 +865,419 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize with a simple text if needed
     if (inputText.value === '') {
-        inputText.value = `Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`;
+        inputText.value = DOMPurify.sanitize(`Apple Inc. announced on Monday that Tim Cook, the CEO, will visit their new headquarters in Cupertino next month. The company reported $90 billion in revenue for the last quarter, exceeding analysts' expectations. Meanwhile, Microsoft's Satya Nadella commented on the recent partnership between the two tech giants during an interview in New York.`);
+    }
+
+    // Knowledge Graph Visualization
+    let graphData = {
+        nodes: [],
+        links: []
+    };
+
+    let simulation = null;
+    let svg = null;
+    let tooltip = null;
+
+    function initializeGraph() {
+        // Create SVG container
+        svg = d3.select('#graphVisualization')
+            .append('svg')
+            .attr('width', '100%')
+            .attr('height', '100%')
+            .call(d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on('zoom', (event) => {
+                    svg.select('g').attr('transform', event.transform);
+                }));
+
+        // Add main group for zooming
+        svg.append('g');
+
+        // Create tooltip
+        tooltip = d3.select('body')
+            .append('div')
+            .attr('class', 'tooltip')
+            .style('opacity', 0);
+
+        // Add zoom controls
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            svg.transition().duration(750).call(d3.zoom().scaleBy, 1.3);
+        });
+
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            svg.transition().duration(750).call(d3.zoom().scaleBy, 0.7);
+        });
+
+        document.getElementById('resetZoom').addEventListener('click', () => {
+            svg.transition().duration(750).call(d3.zoom().transform, d3.zoomIdentity);
+        });
+    }
+
+    function updateGraph(entities, relations) {
+        // Clear existing graph
+        if (svg) {
+            svg.selectAll('*').remove();
+            svg.append('g');
+        } else {
+            initializeGraph();
+        }
+
+        // Prepare nodes from entities
+        const nodes = entities.map(entity => ({
+            id: entity.text,
+            type: entity.type,
+            context: entity.context
+        }));
+
+        // Prepare links from relations
+        const links = relations.map(relation => ({
+            source: relation.entity1,
+            target: relation.entity2,
+            type: relation.type,
+            relation: relation.relation
+        }));
+
+        // Update graph data
+        graphData = { nodes, links };
+
+        // Create force simulation
+        simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+            .force('charge', d3.forceManyBody().strength(-300))
+            .force('center', d3.forceCenter(
+                document.getElementById('graphVisualization').clientWidth / 2,
+                document.getElementById('graphVisualization').clientHeight / 2
+            ));
+
+        // Create links
+        const link = svg.select('g')
+            .selectAll('.link')
+            .data(links)
+            .enter()
+            .append('line')
+            .attr('class', d => `link link-${d.type}`)
+            .attr('marker-end', 'url(#arrow)');
+
+        // Create nodes
+        const node = svg.select('g')
+            .selectAll('.node')
+            .data(nodes)
+            .enter()
+            .append('g')
+            .attr('class', d => `node node-${d.type}`)
+            .call(d3.drag()
+                .on('start', dragstarted)
+                .on('drag', dragged)
+                .on('end', dragended));
+
+        // Add circles to nodes
+        node.append('circle')
+            .attr('r', 8);
+
+        // Add labels to nodes
+        node.append('text')
+            .text(d => d.id)
+            .attr('x', 12)
+            .attr('y', 4);
+
+        // Add tooltips
+        node.on('mouseover', function(event, d) {
+            tooltip.transition()
+                .duration(200)
+                .style('opacity', .9);
+            tooltip.html(`
+                <strong>${DOMPurify.sanitize(d.id)}</strong><br/>
+                Type: ${DOMPurify.sanitize(d.type)}<br/>
+                Context: ${DOMPurify.sanitize(d.context)}
+            `)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mouseout', function() {
+            tooltip.transition()
+                .duration(500)
+                .style('opacity', 0);
+        });
+
+        // Update positions on simulation tick
+        simulation.on('tick', () => {
+            link
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+
+            node
+                .attr('transform', d => `translate(${d.x},${d.y})`);
+        });
+    }
+
+    // Drag functions
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    // Initialize graph when the page loads
+    initializeGraph();
+
+    // Report Generation and Download
+    const downloadReport = document.getElementById('downloadReport');
+    const reportFormat = document.getElementById('reportFormat');
+
+    downloadReport.addEventListener('click', () => {
+        if (isProcessing) {
+            showError('Please wait for current operation to complete');
+            return;
+        }
+        
+        const format = reportFormat.value;
+        const report = generateReport(format);
+        downloadFile(report, format);
+    });
+
+    function generateReport(format) {
+        const report = {
+            timestamp: new Date().toISOString(),
+            inputText: inputText.value,
+            entities: graphData.nodes,
+            relations: graphData.links,
+            processingTime: processingTime.textContent,
+            statistics: {
+                entityCount: entitiesCount.textContent,
+                relationCount: relationsCount.textContent
+            }
+        };
+
+        switch (format) {
+            case 'json':
+                return JSON.stringify(report, null, 2);
+            
+            case 'csv':
+                return generateCSV(report);
+            
+            case 'txt':
+                return generateTextReport(report);
+            
+            case 'pdf':
+                return generatePDF(report);
+            
+            default:
+                return JSON.stringify(report, null, 2);
+        }
+    }
+
+    function generateCSV(report) {
+        const lines = [];
+        
+        // Add metadata
+        lines.push('Analysis Report');
+        lines.push(`Generated: ${report.timestamp}`);
+        lines.push(`Processing Time: ${report.processingTime}`);
+        lines.push(`Entity Count: ${report.statistics.entityCount}`);
+        lines.push(`Relation Count: ${report.statistics.relationCount}`);
+        lines.push('');
+
+        // Add entities
+        lines.push('Entities');
+        lines.push('Text,Type,Context');
+        report.entities.forEach(entity => {
+            lines.push(`${entity.id},${entity.type},"${entity.context.replace(/"/g, '""')}"`);
+        });
+        lines.push('');
+
+        // Add relations
+        lines.push('Relations');
+        lines.push('Source,Target,Type,Relation');
+        report.relations.forEach(relation => {
+            lines.push(`${relation.source},${relation.target},${relation.type},${relation.relation}`);
+        });
+
+        return lines.join('\n');
+    }
+
+    function generateTextReport(report) {
+        const lines = [];
+        
+        // Add header
+        lines.push('=== Text Analysis Report ===');
+        lines.push(`Generated: ${report.timestamp}`);
+        lines.push(`Processing Time: ${report.processingTime}`);
+        lines.push('');
+
+        // Add statistics
+        lines.push('=== Statistics ===');
+        lines.push(`Total Entities: ${report.statistics.entityCount}`);
+        lines.push(`Total Relations: ${report.statistics.relationCount}`);
+        lines.push('');
+
+        // Add entities
+        lines.push('=== Entities ===');
+        report.entities.forEach(entity => {
+            lines.push(`- ${entity.id} (${entity.type})`);
+            lines.push(`  Context: ${entity.context}`);
+            lines.push('');
+        });
+
+        // Add relations
+        lines.push('=== Relations ===');
+        report.relations.forEach(relation => {
+            lines.push(`- ${relation.source} ${relation.relation} ${relation.target}`);
+            lines.push(`  Type: ${relation.type}`);
+            lines.push('');
+        });
+
+        return lines.join('\n');
+    }
+
+    function generatePDF(report) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Set font styles
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(20);
+        doc.setTextColor(0, 0, 0);
+        
+        // Add title
+        doc.text("Text Analysis Report", 105, 30, { align: "center" });
+        
+        // Add timestamp and statistics
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Generated: ${report.timestamp}`, 20, 45);
+        doc.text(`Processing Time: ${report.processingTime}`, 20, 55);
+        doc.text(`Total Entities: ${report.statistics.entityCount}`, 20, 65);
+        doc.text(`Total Relations: ${report.statistics.relationCount}`, 20, 75);
+        
+        // Add entities table
+        doc.setFont("helvetica", "bold");
+        doc.text("Entities", 20, 90);
+        
+        const entityData = report.entities.map(entity => [
+            entity.id,
+            entity.type,
+            entity.context
+        ]);
+        
+        doc.autoTable({
+            startY: 95,
+            head: [['Entity', 'Type', 'Context']],
+            body: entityData,
+            theme: 'grid',
+            headStyles: { fillColor: [74, 111, 165] },
+            styles: { fontSize: 10, cellPadding: 5 },
+            columnStyles: {
+                0: { cellWidth: 50 },
+                1: { cellWidth: 30 },
+                2: { cellWidth: 'auto' }
+            }
+        });
+        
+        // Add relations table
+        const relationsY = doc.lastAutoTable.finalY + 20;
+        doc.setFont("helvetica", "bold");
+        doc.text("Relations", 20, relationsY);
+        
+        const relationData = report.relations.map(relation => [
+            relation.source,
+            relation.target,
+            relation.type,
+            relation.relation
+        ]);
+        
+        doc.autoTable({
+            startY: relationsY + 5,
+            head: [['Source', 'Target', 'Type', 'Relation']],
+            body: relationData,
+            theme: 'grid',
+            headStyles: { fillColor: [74, 111, 165] },
+            styles: { fontSize: 10, cellPadding: 5 },
+            columnStyles: {
+                0: { cellWidth: 40 },
+                1: { cellWidth: 40 },
+                2: { cellWidth: 30 },
+                3: { cellWidth: 'auto' }
+            }
+        });
+        
+        // Add original text with page breaks
+        const textY = doc.lastAutoTable.finalY + 20;
+        doc.setFont("helvetica", "bold");
+        doc.text("Original Text", 20, textY);
+        
+        doc.setFont("helvetica", "normal");
+        const splitText = doc.splitTextToSize(report.inputText, 170);
+        let currentY = textY + 10;
+        const pageHeight = doc.internal.pageSize.height;
+        const margin = 20;
+        
+        // Function to add footer to each page
+        const addFooter = () => {
+            const footerY = pageHeight - margin;
+            doc.setFontSize(10);
+            doc.setTextColor(100, 100, 100);
+            doc.text("Advanced Text Analysis Toolkit © 2025 | Using the lightweight Compromise.js NLP library", 105, footerY, { align: "center" });
+        };
+        
+        // Add footer to first page
+        addFooter();
+        
+        // Add text with page breaks
+        for (let i = 0; i < splitText.length; i++) {
+            if (currentY > pageHeight - margin - 10) {
+                doc.addPage();
+                currentY = margin;
+                addFooter();
+            }
+            doc.text(splitText[i], 20, currentY);
+            currentY += 7;
+        }
+        
+        return doc;
+    }
+
+    function downloadFile(content, format) {
+        if (format === 'pdf') {
+            content.save(`text-analysis-report-${new Date().toISOString().slice(0,10)}.pdf`);
+            return;
+        }
+
+        const blob = new Blob([content], { type: getMimeType(format) });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `text-analysis-report-${new Date().toISOString().slice(0,10)}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+
+    function getMimeType(format) {
+        switch (format) {
+            case 'json':
+                return 'application/json';
+            case 'csv':
+                return 'text/csv';
+            case 'txt':
+                return 'text/plain';
+            case 'pdf':
+                return 'application/pdf';
+            default:
+                return 'text/plain';
+        }
     }
 });
