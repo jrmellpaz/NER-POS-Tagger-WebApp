@@ -1229,7 +1229,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const footerY = pageHeight - margin;
             doc.setFontSize(10);
             doc.setTextColor(100, 100, 100);
-            doc.text("Advanced Text Analysis Toolkit © 2025 | Using the lightweight Compromise.js NLP library", 105, footerY, { align: "center" });
+            doc.text("Grammatrix — An Advanced Text Analysis Toolkit © 2025 | Using the lightweight Compromise.js NLP library", 105, footerY, { align: "center" });
         };
         
         // Add footer to first page

@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced Text Analysis Toolkit</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Manrope:wght@200..800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -94,9 +97,9 @@
 
     <div class="container">
         <header>
-            <h1><i class="fas fa-brain"></i> Advanced Text Analysis Toolkit</h1>
+            <h1><i class="fas fa-brain"></i> Advanced Text Analysis Toolkit</h1>      
             <p class="subtitle"><strong>Named Entity Recognition, Relation Extraction & Temporal Analysis</strong></p>
-            <p class="subtitle2"><strong>by Figueroa, Lapaz, Abelido, Nunez</strong></p>
+            <p class="subtitle2"><strong>by Figueroa, Lapaz, Abelido, Nuñez</strong></p>
         </header>
 
         <div class="input-section">
@@ -104,7 +107,7 @@
                 <div class="file-upload">
                     <input type="file" id="fileInput" accept=".txt,.docx,.pdf" style="display: none;">
                     <button id="uploadBtn" class="btn upload-btn">
-                        <i class="fas fa-file-upload"></i> Upload File
+                        <i class="fas fa-file-upload"></i> Upload file
                     </button>
                     <span id="fileName" class="file-name"></span>
                 </div>
@@ -113,12 +116,14 @@
                     <button id="analyzeBtn" class="btn analyze-btn">
                         <i class="fas fa-search"></i> Analyze Text
                     </button>
-                    <button id="sampleBtn" class="btn sample-btn">
-                        <i class="fas fa-lightbulb"></i> Load Sample
-                    </button>
-                    <button id="clearBtn" class="btn clear-btn">
-                        <i class="fas fa-trash"></i> Clear
-                    </button>
+                    <div class="secondary-controls">
+                        <button id="sampleBtn" class="btn sample-btn">
+                            <i class="fas fa-lightbulb"></i> Load Sample
+                        </button>
+                        <button id="clearBtn" class="btn clear-btn">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -230,7 +235,7 @@
         </div>
 
         <footer>
-            <p>Advanced Text Analysis Toolkit &copy; 2025 | Using the lightweight Compromise.js NLP library</p>
+            <p>Grammatrix — An Advanced Text Analysis Toolkit &copy; 2025 | Using the lightweight Compromise.js NLP library</p>
         </footer>
     </div>
 
