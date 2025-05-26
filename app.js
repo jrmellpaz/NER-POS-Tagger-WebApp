@@ -130,7 +130,7 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    showLoading("Generating creative text...");
+    showLoading("Generating sample text...");
     const userPrompt =
       "Give me a text of at least 200 words that includes various named entities such as people, organizations, places, dates, and values. The text should be coherent and suitable for NLP analysis. Plain text only, no headings or formatting (e.g. bold, italics, underline, strikethrough, etc.).";
 
