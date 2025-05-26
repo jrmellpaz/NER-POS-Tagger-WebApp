@@ -11,7 +11,8 @@
     --warning-color: #ff9800;
     --error-color: #f44336;
     --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --border-radius: 8px;
+    --border-radius: 50px;
+    --content-radius: 12px;
     --primary-dark: #3a5a80; /* Added for button hover states */
 }
 
@@ -22,7 +23,7 @@
 }
 
 body {
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Manrope', sans-serif;
     background-color: var(--background-color);
     color: var(--text-color);
     line-height: 1.6;
@@ -60,28 +61,31 @@ header h1 i {
 .subtitle2 {
     font-size: 1.1rem;
     color: var(--secondary-color);
-    margin-top: 10px;
     font-weight: 300;
 }
 
 .input-section {
     margin-bottom: 30px;
+    height: auto;
 }
 
 .text-input {
     position: relative;
+    height: auto;
 }
 
 .text-input textarea {
     width: 100%;
     min-height: 200px;
     padding: 15px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
+    border: 2px solid var(--border-color);
+    border-radius: var(--content-radius);
     font-size: 1rem;
-    resize: vertical;
+    field-sizing: content;
+    resize: none;
     transition: border 0.3s ease;
     box-shadow: var(--shadow);
+    font-family: "Jetbrains Mono", monospace;
 }
 
 .text-input textarea:focus {
@@ -93,6 +97,11 @@ header h1 i {
     display: flex;
     gap: 10px;
     margin-top: 15px;
+}
+
+.secondary-controls {
+    display: flex;
+    gap: 10px;
 }
 
 .btn {
@@ -144,7 +153,7 @@ header h1 i {
 .processing-section {
     background-color: var(--card-color);
     padding: 20px;
-    border-radius: var(--border-radius);
+    border-radius: var(--content-radius);
     margin-bottom: 30px;
     box-shadow: var(--shadow);
 }
@@ -155,18 +164,19 @@ header h1 i {
 
 .progress-container {
     width: 100%;
-    background-color: #e0e0e0;
-    border-radius: 20px;
     margin-bottom: 15px;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .progress-bar {
     height: 20px;
     background-color: var(--accent-color);
     width: 0%;
-    border-radius: 20px;
-    transition: width 0.5s ease;
+    border-radius: var(--content-radius);
+    transition: width 0.5s cubic-bezier(0.075, 0.82, 0.165, 1);
 }
 
 .progress-text {
@@ -239,7 +249,7 @@ header h1 i {
     display: none;
     background-color: var(--card-color);
     padding: 20px;
-    border-radius: var(--border-radius);
+    border-radius: var(--content-radius);
     box-shadow: var(--shadow);
     margin-bottom: 30px;
 }
@@ -268,12 +278,17 @@ header h1 i {
 }
 
 .filters select {
-    padding: 8px 12px;
-    border-radius: var(--border-radius);
+    padding: 8px;
     border: 1px solid var(--border-color);
-    font-size: 0.9rem;
-    background-color: var(--card-color);
-    color: var(--text-color);
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    outline: none;
+}
+
+.filter select:focus {
+    outline: none;
+    border-color: var(--border-color);
 }
 
 .results-container {
@@ -287,7 +302,7 @@ header h1 i {
     border-left: 4px solid var(--accent-color);
     padding: 15px;
     margin-bottom: 15px;
-    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    border-radius: 0 var(--content-radius) var(--content-radius) 0;
     box-shadow: var(--shadow);
     transition: transform 0.2s ease;
 }
@@ -443,16 +458,15 @@ footer {
 .file-upload {
     display: flex;
     align-items: center;
-    gap: 10px;
     margin-bottom: 10px;
 }
 
 .upload-btn {
     background-color: var(--primary-color);
     color: white;
-    padding: 8px 16px;
+    padding: 12px 20px;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--border-radius);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -461,7 +475,7 @@ footer {
 }
 
 .upload-btn:hover {
-    background-color: var(--primary-color-dark);
+    background-color: var(--primary-dark);
 }
 
 .file-name {
@@ -691,7 +705,7 @@ footer {
     color: white;
     border: none;
     padding: 8px 16px;
-    border-radius: 4px;
+    border-radius: var(--border-radius);
     cursor: pointer;
     display: flex;
     align-items: center;

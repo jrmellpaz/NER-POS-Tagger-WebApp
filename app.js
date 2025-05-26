@@ -71,11 +71,6 @@ document.addEventListener("DOMContentLoaded", function () {
           ],
         },
       ],
-      // You can add generationConfig here if needed, e.g., for temperature, maxOutputTokens
-      // "generationConfig": {
-      //   "temperature": 0.7,
-      //   "maxOutputTokens": 1000
-      // }
     };
 
     // 5. Configure the fetch request
@@ -128,33 +123,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // --- Example Usage ---
-  // async function main() {
-  //   const userPrompt = "Explain quantum computing in simple terms.";
-  //   console.log(`Sending prompt: "${userPrompt}"`);
-
-  //   const loadingIndicator = document.getElementById("loading"); // Assuming you have a <div id="loading"></div>
-  //   const outputElement = document.getElementById("output"); // Assuming you have a <div id="output"></div>
-
-  //   if (loadingIndicator) loadingIndicator.style.display = "block";
-  //   if (outputElement) outputElement.textContent = "";
-
-  //   const geminiResponse = await fetchGeminiInfo(userPrompt);
-
-  //   if (loadingIndicator) loadingIndicator.style.display = "none";
-  //   if (outputElement) outputElement.textContent = geminiResponse;
-
-  //   console.log("\nGemini's Response:");
-  //   console.log(geminiResponse);
-  // }
-
-  // To run this example, you would typically call main()
-  // For example, in an HTML file, you could have:
-  // <button onclick="main()">Get Info from Gemini</button>
-  // <div id="loading" style="display:none;">Loading...</div>
-  // <div id="output"></div>
-  // main(); // Or call it on a button click, etc.
-
   // Load sample text
   sampleBtn.addEventListener("click", async function () {
     if (isProcessing) {
@@ -164,7 +132,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     showLoading("Generating creative text...");
     const userPrompt =
-      "Give me a meaningful paragraph with around 200 words that can be used for NLP NER POST Tagging analysis.";
+      "Give me a text of at least 200 words that includes various named entities such as people, organizations, places, dates, and values. The text should be coherent and suitable for NLP analysis. Plain text only, no headings or formatting (e.g. bold, italics, underline, strikethrough, etc.).";
 
     let result;
 
@@ -177,41 +145,6 @@ document.addEventListener("DOMContentLoaded", function () {
       inputText.value = DOMPurify.sanitize(result);
       hideLoading();
     }
-
-    // fetch("https://api.openai.com/v1/completions", {
-    //   method: "POST",
-    //   headers: {
-    //     "Content-Type": "application/json",
-    //     Authorization: "Bearer 2db96450-ce52-49ad-afb2-c39647ab81f4",
-    //   },
-    //   body: JSON.stringify({
-    //     model: "text-davinci-003",
-    //     prompt:
-    //       "Give me a meaningful paragraph with around 200 words that can be used for NLP NER POST Tagging analysis.",
-    //     max_tokens: 100,
-    //   }),
-    // })
-    //   .then((res) => res.json())
-    //   .then((data) => {
-    //     if (data.choices && data.choices[0] && data.choices[0].text) {
-    //       inputText.value = DOMPurify.sanitize(data.choices[0].text);
-    //     } else {
-    //       showError(
-    //         "Failed to generate sample text. Please check your API key or try again later."
-    //       );
-    //       inputText.value = DOMPurify.sanitize(
-    //         "Leaves fall in golden whispers, crisp air bites, pumpkins glow. Autumn's quiet song."
-    //       );
-    //     }
-    //     hideLoading();
-    //   })
-    //   .catch((error) => {
-    //     console.error("DeepAI API error:", error);
-    //     inputText.value = DOMPurify.sanitize(
-    //       "Leaves fall in golden whispers, crisp air bites, pumpkins glow. Autumn's quiet song."
-    //     );
-    //     hideLoading();
-    //   });
   });
 
   // Clear text
@@ -1461,7 +1394,7 @@ document.addEventListener("DOMContentLoaded", function () {
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.text(
-        "Advanced Text Analysis Toolkit © 2025 | Using the lightweight Compromise.js NLP library",
+        "Grammatrix — An Advanced Text Analysis Toolkit © 2025 | Using the lightweight Compromise.js NLP library",
         105,
         footerY,
         { align: "center" }
